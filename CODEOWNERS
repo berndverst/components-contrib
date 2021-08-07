@@ -1,2 +1,59 @@
 # These owners are the maintainers and approvers of this repo
 *       @dapr/maintainers-components-contrib @dapr/approvers-components-contrib
+
+# Default owners for all cloud specific subfolders
+azure/ @artursouza @berndverst @codemonkeyleet @dmitsh @pkedy @tanvigour @wcs1only @yaron2
+aws/
+gcp/
+alicloud/
+
+# Bindings
+/bindings/apns/
+/bindings/cron/
+/bindings/graphql/
+/bindings/http/
+/bindings/influx/
+/bindings/kubernetes/
+/bindings/localstorage/
+/bindings/mqtt/
+/bindings/mysql/
+/bindings/postres/
+/bindings/postmark/
+/bindings/rabbitmq/
+/bindings/redis/
+/bindings/rethinkdb/
+/bindings/smtp/
+/bindings/twilio/
+/bindings/twitter/
+/bindings/zeebe/
+
+# PubSub
+/pubsub/hazelcast/
+/pubsub/kafka/
+/pubsub/mqtt/
+/pubsub/natsstreaming/
+/pubsub/pulsar/
+/pubsub/rabbitmq/
+/pubsub/redis/
+
+# Secret Stores
+/secretstores/hashicorp/vault/
+/secretstores/kubernetes/
+/secretstores/local/
+
+# State Stores
+/state/aerospike/ @abhirockzz
+/state/cassandra/ @yaron2
+/state/cloudstate/ @yaron2
+/state/couchbase/ @abhirockzz
+/state/hashicorp/consul/ @anubhavmishra
+/state/hazelcast/ @abhirockzz
+/state/memcached/ @singhabhilash
+/state/mongodb/
+/state/mysql/
+/state/postresql/
+/state/redis/
+/state/rethinkdb/
+/state/sqlserver/
+/state/zookeeper/
+
