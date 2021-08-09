@@ -8,36 +8,36 @@ gcp/
 alicloud/
 
 # Bindings
-/bindings/apns/
+/bindings/apns/ @mfcollins3
 /bindings/cron/
-/bindings/graphql/
-/bindings/http/
-/bindings/influx/
+/bindings/graphql/ @amirmm11
+/bindings/http/ @artursouza @berndverst @codemonkeyleet @dmitsh @pkedy @tanvigour @wcs1only @yaron2
+/bindings/influx/ @gbaeke
 /bindings/kubernetes/
 /bindings/localstorage/
-/bindings/mqtt/
+/bindings/mqtt/ @hugome
 /bindings/mysql/
-/bindings/postres/
-/bindings/postmark/
+/bindings/postgres/
+/bindings/postmark/ @eNeRGy164
 /bindings/rabbitmq/
 /bindings/redis/
-/bindings/rethinkdb/
+/bindings/rethinkdb/ @mchmarny
 /bindings/smtp/
-/bindings/twilio/
-/bindings/twitter/
-/bindings/zeebe/
+/bindings/twilio/ @mchmarny
+/bindings/twitter/ @mchmarny
+/bindings/zeebe/ @akkie
 
 # PubSub
-/pubsub/hazelcast/
-/pubsub/kafka/
-/pubsub/mqtt/
-/pubsub/natsstreaming/
-/pubsub/pulsar/
+/pubsub/hazelcast/ @peterjot
+/pubsub/kafka/ @khous
+/pubsub/mqtt/ @kumaya
+/pubsub/natsstreaming/ @abhirockzz
+/pubsub/pulsar/ @elyst
 /pubsub/rabbitmq/
-/pubsub/redis/
+/pubsub/redis/ @artursouza @berndverst @codemonkeyleet @dmitsh @pkedy @tanvigour @wcs1only @yaron2
 
 # Secret Stores
-/secretstores/hashicorp/vault/
+/secretstores/hashicorp/vault/ @anubhavmishra @cmendible
 /secretstores/kubernetes/
 /secretstores/local/
 
@@ -49,11 +49,11 @@ alicloud/
 /state/hashicorp/consul/ @anubhavmishra
 /state/hazelcast/ @abhirockzz
 /state/memcached/ @singhabhilash
-/state/mongodb/
+/state/mongodb/ @shalabhms
 /state/mysql/
 /state/postresql/
-/state/redis/
-/state/rethinkdb/
-/state/sqlserver/
-/state/zookeeper/
+/state/redis/ @artursouza @berndverst @codemonkeyleet @dmitsh @pkedy @tanvigour @wcs1only @yaron2
+/state/rethinkdb/ @mchmarny
+/state/sqlserver/ @fbeltrao
+/state/zookeeper/ @flier
 
