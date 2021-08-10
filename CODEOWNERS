@@ -3,9 +3,9 @@
 
 # Default owners for all cloud specific subfolders
 azure/ @artursouza @berndverst @codemonkeyleet @dmitsh @pkedy @tanvigour @wcs1only @yaron2
-aws/
-gcp/
-alicloud/
+aws/ # Add general AWS owners here
+gcp/ # Add general GCP owners here
+alicloud/ # Add general AliCloud owners here
 
 # Bindings
 /bindings/apns/ @mfcollins3
