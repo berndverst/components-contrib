@@ -147,7 +147,7 @@ func (a *AzureBlobStorage) Init(metadata bindings.Metadata) error {
 		}
 		containerClient, containerClientErr = azblob.NewContainerClientWithSharedKey(URL.String(), credential, &options)
 		if containerClientErr != nil {
-			return fmt.Errorf("Cannot init Blobstorage container client: %w", err)
+			return fmt.Errorf("cannot init Blobstorage container client: %w", err)
 		}
 		a.containerClient = containerClient
 	} else {
@@ -160,7 +160,7 @@ func (a *AzureBlobStorage) Init(metadata bindings.Metadata) error {
 
 	}
 	if containerClientErr != nil {
-		return fmt.Errorf("Cannot init Blobstorage container client: %w", containerClientErr)
+		return fmt.Errorf("cannot init Blobstorage container client: %w", containerClientErr)
 	}
 	a.containerClient = containerClient
 
@@ -386,8 +386,12 @@ func (a *AzureBlobStorage) list(req *bindings.InvokeRequest) (*bindings.InvokeRe
 
 	if hasPayload {
 		var includeItems []azblob.ListBlobsIncludeItem
+
 		if payload.Include.Copy {
 			includeItems = append(includeItems, azblob.ListBlobsIncludeItemCopy)
+		}
+		if payload.Include.Deleted {
+			includeItems = append(includeItems, azblob.ListBlobsIncludeItemDeleted)
 		}
 		if payload.Include.Metadata {
 			includeItems = append(includeItems, azblob.ListBlobsIncludeItemMetadata)
@@ -398,11 +402,8 @@ func (a *AzureBlobStorage) list(req *bindings.InvokeRequest) (*bindings.InvokeRe
 		if payload.Include.UncommittedBlobs {
 			includeItems = append(includeItems, azblob.ListBlobsIncludeItemUncommittedblobs)
 		}
-		if payload.Include.Deleted {
-			includeItems = append(includeItems, azblob.ListBlobsIncludeItemDeleted)
-		}
 
-		options.Include = append(options.Include, includeItems...)
+		options.Include = includeItems
 	}
 
 	if hasPayload && payload.MaxResults != int32(0) {
@@ -424,16 +425,20 @@ func (a *AzureBlobStorage) list(req *bindings.InvokeRequest) (*bindings.InvokeRe
 	}
 	options.Marker = &initialMarker
 
-	var blobs []*azblob.BlobItemInternal
+	blobs := []*azblob.BlobItemInternal{}
 	metadata := map[string]string{}
 	ctx := context.Background()
+
 	var listBlobPager *azblob.ContainerListBlobFlatSegmentPager = a.containerClient.ListBlobsFlat(&options)
 	for listBlobPager.NextPage(ctx) {
 		currentPage := listBlobPager.PageResponse()
-		blobs = append(blobs, currentPage.ContainerListBlobFlatSegmentResult.Segment.BlobItems...)
 
+		blobs = append(blobs, currentPage.ContainerListBlobFlatSegmentResult.Segment.BlobItems...)
 		numBlobs := len(blobs)
-		metadata[metadataKeyMarker] = *currentPage.Marker
+		metadata[metadataKeyMarker] = ""
+		if currentPage.Marker != nil {
+			metadata[metadataKeyMarker] = *currentPage.Marker
+		}
 		metadata[metadataKeyNumber] = strconv.FormatInt(int64(numBlobs), 10)
 
 		if *options.Maxresults-maxResults > 0 {
