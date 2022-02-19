@@ -38,11 +38,13 @@ Concurrency is supported with ETags according to https://docs.microsoft.com/en-u
 package tablestorage
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/Azure/azure-sdk-for-go/storage"
-	"github.com/agrea/ptr"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/pkg/errors"
 
@@ -62,8 +64,9 @@ const (
 
 type StateStore struct {
 	state.DefaultBulkStore
-	table *storage.Table
-	json  jsoniter.API
+	serviceClient *aztables.ServiceClient
+	table         *aztables.Client
+	json          jsoniter.API
 
 	features []state.Feature
 	logger   logger.Logger
@@ -82,19 +85,21 @@ func (r *StateStore) Init(metadata state.Metadata) error {
 		return err
 	}
 
-	client, _ := storage.NewBasicClient(meta.accountName, meta.accountKey)
-	tables := client.GetTableService()
-	userAgent := "dapr-" + logger.DaprVersion
-	client.AddToUserAgent(userAgent)
-	r.table = tables.GetTableReference(meta.tableName)
+	ctx := context.TODO()
 
-	// check table exists
+	endpoint := fmt.Sprintf("https://%s.table.core.windows.net", meta.accountName)
+	sharedKey, _ := aztables.NewSharedKeyCredential(meta.accountName, meta.accountKey)
+	r.serviceClient, _ = aztables.NewServiceClientWithSharedKey(endpoint, sharedKey, nil)
+
 	r.logger.Debugf("using table '%s'", meta.tableName)
-	err = r.table.Create(operationTimeout, storage.FullMetadata, nil)
+	// check table exists
+	r.table, err = r.serviceClient.CreateTable(ctx, meta.tableName, nil)
+
 	if err != nil {
 		if isTableAlreadyExistsError(err) {
 			// error creating table, but it already exists so we're fine
 			r.logger.Debugf("table already exists")
+			r.table = r.serviceClient.NewClient(meta.tableName)
 		} else {
 			return err
 		}
@@ -127,10 +132,10 @@ func (r *StateStore) Delete(req *state.DeleteRequest) error {
 }
 
 func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+	ctx := context.TODO()
 	r.logger.Debugf("fetching %s", req.Key)
 	pk, rk := getPartitionAndRowKey(req.Key)
-	entity := r.table.GetEntityReference(pk, rk)
-	err := entity.Get(operationTimeout, storage.FullMetadata, nil)
+	entity, err := r.table.GetEntity(ctx, pk, rk, nil)
 	if err != nil {
 		if isNotFoundError(err) {
 			return &state.GetResponse{}, nil
@@ -138,12 +143,13 @@ func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 
 		return &state.GetResponse{}, err
 	}
-
-	data, etag, err := r.unmarshal(entity)
+	var myEntity aztables.EDMEntity
+	err = json.Unmarshal(entity.Value, &myEntity)
+	data, err := r.unmarshal(myEntity)
 
 	return &state.GetResponse{
 		Data: data,
-		ETag: etag,
+		ETag: &myEntity.Etag,
 	}, err
 }
 
@@ -192,21 +198,26 @@ func getTablesMetadata(metadata map[string]string) (*tablesMetadata, error) {
 
 func (r *StateStore) writeRow(req *state.SetRequest) error {
 	pk, rk := getPartitionAndRowKey(req.Key)
-	entity := r.table.GetEntityReference(pk, rk)
-	entity.Properties = map[string]interface{}{
-		valueEntityProperty: r.marshal(req),
-	}
 
 	var etag string
 	if req.ETag != nil {
 		etag = *req.ETag
 	}
-	entity.OdataEtag = etag
 
 	// InsertOrReplace does not support ETag concurrency, therefore we will use Insert to check for key existence
 	// and then use Update to update the key if it exists with the specified ETag
 
-	err := entity.Insert(storage.FullMetadata, nil)
+	entity := aztables.EDMEntity{
+		Entity: aztables.Entity{
+			PartitionKey: pk,
+			RowKey:       rk,
+		},
+		// Etag: etag,
+		Properties: map[string]interface{}{
+			valueEntityProperty: r.marshal(req),
+		},
+	}
+	marshalled, err := json.Marshal(entity)
 	if err != nil {
 		// If Insert failed because item already exists, try to Update instead per Upsert semantics
 		if isEntityAlreadyExistsError(err) {
@@ -214,7 +225,10 @@ func (r *StateStore) writeRow(req *state.SetRequest) error {
 			// Today the presence of etag takes precedence over Concurrency.
 			// In the future #2739 will impose a breaking change which must disallow the use of etag when not using FirstWrite.
 			if etag != "" {
-				uerr := entity.Update(false, nil)
+				_, uerr := r.table.InsertEntity(context.TODO(), marshalled, &aztables.InsertEntityOptions{
+					ETag:       azcore.ETag(etag),
+					UpdateMode: aztables.EntityUpdateMode(aztables.UpdateReplace),
+				})
 				if uerr != nil {
 					if isNotFoundError(uerr) {
 						return state.NewETagError(state.ETagMismatch, uerr)
@@ -229,7 +243,10 @@ func (r *StateStore) writeRow(req *state.SetRequest) error {
 				return state.NewETagError(state.ETagMismatch, errors.New("update with Concurrency.FirstWrite without ETag"))
 			} else {
 				// Finally, last write semantics without ETag should always perform a force update.
-				return entity.Update(true, nil)
+				_, err = r.table.InsertEntity(context.TODO(), marshalled, &aztables.InsertEntityOptions{
+					UpdateMode: aztables.EntityUpdateMode(aztables.UpdateReplace),
+				})
+				return err
 			}
 		} else {
 			// Any other unexpected error on Insert is propagated to the caller
@@ -241,38 +258,42 @@ func (r *StateStore) writeRow(req *state.SetRequest) error {
 }
 
 func isNotFoundError(err error) bool {
-	azureError, ok := err.(storage.AzureStorageServiceError)
+	azureError, ok := err.(*azcore.ResponseError)
 
-	return ok && azureError.Code == "ResourceNotFound"
+	return ok && azureError.ErrorCode == "ResourceNotFound"
 }
 
 func isEntityAlreadyExistsError(err error) bool {
-	azureError, ok := err.(storage.AzureStorageServiceError)
+	azureError, ok := err.(*azcore.ResponseError)
 
-	return ok && azureError.Code == "EntityAlreadyExists"
+	return ok && azureError.ErrorCode == "EntityAlreadyExists"
 }
 
 func isTableAlreadyExistsError(err error) bool {
-	azureError, ok := err.(storage.AzureStorageServiceError)
+	azureError, ok := err.(*azcore.ResponseError)
 
-	return ok && azureError.Code == "TableAlreadyExists"
+	return ok && azureError.StatusCode == 409
 }
 
 func (r *StateStore) deleteRow(req *state.DeleteRequest) error {
 	pk, rk := getPartitionAndRowKey(req.Key)
-	entity := r.table.GetEntityReference(pk, rk)
 
 	if req.ETag != nil {
-		entity.OdataEtag = *req.ETag
 
 		// force=false sets the "If-Match: <ETag>" header to ensure that the delete is only performed if the
 		// entity's ETag matches the specified ETag
-		return entity.Delete(false, nil)
+		etag := azcore.ETag(*req.ETag)
+		_, err := r.table.DeleteEntity(context.TODO(), pk, rk, &aztables.DeleteEntityOptions{
+			IfMatch: &etag,
+		})
+		return err
+
 	}
 
 	// force=true sets the "If-Match: *" header to ensure that we delete a matching entity
 	// regardless of the entity's ETag value
-	return entity.Delete(true, nil)
+	_, err := r.table.DeleteEntity(context.TODO(), pk, rk, &aztables.DeleteEntityOptions{})
+	return err
 }
 
 func (r *StateStore) Ping() error {
@@ -282,7 +303,7 @@ func (r *StateStore) Ping() error {
 func getPartitionAndRowKey(key string) (string, string) {
 	pr := strings.Split(key, keyDelimiter)
 	if len(pr) != 2 {
-		return pr[0], ""
+		return pr[0], "default"
 	}
 
 	return pr[0], pr[1]
@@ -300,22 +321,19 @@ func (r *StateStore) marshal(req *state.SetRequest) string {
 	return v
 }
 
-func (r *StateStore) unmarshal(row *storage.Entity) ([]byte, *string, error) {
+func (r *StateStore) unmarshal(row aztables.EDMEntity) ([]byte, error) {
 	raw := row.Properties[valueEntityProperty]
 
 	// value column not present
 	if raw == nil {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	// must be a string
 	sv, ok := raw.(string)
 	if !ok {
-		return nil, nil, errors.New(fmt.Sprintf("expected string in column '%s'", valueEntityProperty))
+		return nil, errors.New(fmt.Sprintf("expected string in column '%s'", valueEntityProperty))
 	}
 
-	// use native ETag
-	etag := row.OdataEtag
-
-	return []byte(sv), ptr.String(etag), nil
+	return []byte(sv), nil
 }
