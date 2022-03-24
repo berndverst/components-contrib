@@ -1,0 +1,15 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: dapr-state-store
+  namespace: default
+spec:
+  type: state.mongodb
+  version: v1
+  metadata:
+  - name: host
+    value: localhost:27017
+  - name: params
+    value: replicaSet=test-rs
+  - name: actorStateStore
+    value: "true"

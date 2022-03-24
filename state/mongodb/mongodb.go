@@ -235,6 +235,10 @@ func (m *MongoDB) Get(req *state.GetRequest) (*state.GetResponse, error) {
 		if data, err = bson.MarshalExtJSON(obj, false, true); err != nil {
 			return &state.GetResponse{}, err
 		}
+	case primitive.A:
+		if data, err = bson.MarshalExtJSON(obj, false, true); err != nil {
+			return &state.GetResponse{}, err
+		}
 	default:
 		if data, err = json.Marshal(result.Value); err != nil {
 			return &state.GetResponse{}, err
