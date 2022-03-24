@@ -2,6 +2,8 @@ module github.com/dapr/components-contrib/tests/certification/secretstores/azure
 
 go 1.17
 
+require github.com/gorilla/mux v1.8.0
+
 require (
 	github.com/dapr/components-contrib v1.6.0-rc.1.0.20220217181903-80c2bbe28485
 	github.com/dapr/components-contrib/tests/certification v0.0.0-20211130185200-4918900c09e1

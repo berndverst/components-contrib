@@ -104,6 +104,12 @@ func WithProfilePort(port int) Option {
 	}
 }
 
+func WithPlacementAddresses(addresses []string) Option {
+	return func(config *runtime.Config) {
+		config.PlacementAddresses = addresses
+	}
+}
+
 func NewRuntime(appID string, opts ...Option) (*runtime.DaprRuntime, *runtime.Config, error) {
 	var err error
 

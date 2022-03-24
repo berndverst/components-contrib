@@ -11,11 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mongo_test
+package mongocertification_test
 
 import (
-	"fmt"
+	"bytes"
+	"encoding/json"
+	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -28,14 +31,12 @@ import (
 	// Dapr runtime and Go-SDK
 	"github.com/dapr/dapr/pkg/runtime"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
-	"github.com/dapr/go-sdk/client"
 	"github.com/dapr/kit/logger"
 
 	// Certification testing runnables
 	"github.com/dapr/components-contrib/tests/certification/embedded"
 	"github.com/dapr/components-contrib/tests/certification/flow"
 
-	"github.com/dapr/components-contrib/tests/certification/flow/dockercompose"
 	"github.com/dapr/components-contrib/tests/certification/flow/sidecar"
 )
 
@@ -48,51 +49,80 @@ const (
 
 func TestMongo(t *testing.T) {
 	log := logger.NewLogger("dapr.components")
-	ports, err := dapr_testing.GetFreePorts(2)
+	ports, err := dapr_testing.GetFreePorts(3)
 	assert.NoError(t, err)
 
 	currentGrpcPort := ports[0]
-	// currentHTTPPort := ports[1]
+	currentHTTPPort := ports[1]
 
-	basicTest := func(ctx flow.Context) error {
-		client, err := client.NewClientWithPort(fmt.Sprint(currentGrpcPort))
+	startTestApp := func(ctx flow.Context) error {
+		go func() {
+			main()
+		}()
+		return nil
+	}
+
+	reminderTest := func(ctx flow.Context) error {
+		// make http post request to the test app
+
+		values := map[string]string{"data": "reminderdata", "dueTime": "1s", "period": "1s"}
+		json_data, err := json.Marshal(values)
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
-		defer client.Close()
 
-		// save state, default options: strong, last-write
-		err = client.SaveState(ctx, stateStoreName, certificationTestPrefix+"key1", []byte("certificationdata"))
-		assert.NoError(t, err)
+		resp, err := http.Post("http://localhost:3000/test/testactorfeatures/10/reminders/myReminder", "application/json",
+			bytes.NewBuffer(json_data))
+		if err != nil {
+			log.Fatal(err)
+		}
 
-		// get state
-		item, err := client.GetState(ctx, stateStoreName, certificationTestPrefix+"key1")
-		assert.NoError(t, err)
-		assert.Equal(t, "certificationdata", string(item.Value))
+		if resp.StatusCode > 299 {
+			log.Fatal("Reminder test failed")
+		}
 
-		// delete state
-		err = client.DeleteState(ctx, stateStoreName, certificationTestPrefix+"key1")
-		assert.NoError(t, err)
+		time.Sleep(time.Second * 5)
 
 		return nil
 	}
 
 	flow.New(t, "Mongo certification using Mongo Docker").
-		// Run SQL Server using Docker Compose.
-		Step(dockercompose.Run("mongo", dockerComposeYAML)).
+		// Run Mongo and Placement using Docker Compose.
+		// Step(dockercompose.Run("mongo", dockerComposeYAML)).
+		Step("Run Actors App", startTestApp).
 
-		// Run the Dapr sidecar with the SQL Server component.
+		// Run the Dapr sidecar with the Mongo component.
 		Step(sidecar.Run(sidecarNamePrefix+"dockerDefault",
-			embedded.WithoutApp(),
+			embedded.WithPlacementAddresses([]string{"localhost:50005"}),
+			embedded.WithAppProtocol(runtime.HTTPProtocol, 3000),
 			embedded.WithDaprGRPCPort(currentGrpcPort),
 			embedded.WithDaprHTTPPort(3500),
 			embedded.WithComponentsPath("components"),
 			runtime.WithStates(
-				state_loader.New("mongo", func() state.Store {
+				state_loader.New("mongodb", func() state.Store {
 					return state_mongodb.NewMongoDB(log)
 				}),
 			))).
-		Step("Run basic test", basicTest).
-		Step("Stopping SQL Server Docker container", dockercompose.Stop("sqlserver", dockerComposeYAML)).
+		Step("Create Reminders", reminderTest).
+		// Step("stopping the sidecar", sidecar.Stop(sidecarNamePrefix+"dockerDefault")).
+		Run()
+
+	flow.New(t, "Mongo certification using Mongo Docker again").
+		Step(sidecar.Run(sidecarNamePrefix+"dockerDefault2",
+			embedded.WithPlacementAddresses([]string{"localhost:50005"}),
+			embedded.WithAppProtocol(runtime.HTTPProtocol, 3000),
+			embedded.WithDaprGRPCPort(ports[2]),
+			embedded.WithDaprHTTPPort(currentHTTPPort),
+			embedded.WithComponentsPath("components"),
+			runtime.WithStates(
+				state_loader.New("mongodb", func() state.Store {
+					return state_mongodb.NewMongoDB(log)
+				}),
+			))).
+		Step("wait", func(ctx flow.Context) error {
+			time.Sleep(time.Second * 5)
+			return nil
+		}).
+		// Step("Stopping Mongo Container", dockercompose.Stop("mongo", dockerComposeYAML)).
 		Run()
 }
