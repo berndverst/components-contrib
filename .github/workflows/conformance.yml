@@ -58,6 +58,7 @@ jobs:
         - bindings.mqtt-emqx
         - bindings.mqtt-mosquitto
         - bindings.mqtt-vernemq
+        - bindings.mqtt-ibmmq
         - bindings.redis
         - pubsub.aws.snssqs
         - pubsub.hazelcast
@@ -66,6 +67,7 @@ jobs:
         - pubsub.mqtt-emqx
         - pubsub.mqtt-mosquitto
         - pubsub.mqtt-vernemq
+        - pubsub.mqtt-ibmmq
         - pubsub.natsstreaming
         - pubsub.pulsar
         - pubsub.rabbitmq
@@ -263,6 +265,10 @@ jobs:
     - name: Start VerneMQ (MQTT)
       run: docker-compose -f ./.github/infrastructure/docker-compose-vernemq.yml -p vernemq up -d
       if: contains(matrix.component, 'mqtt-vernemq')
+
+    - name: Start IBMMQ (MQTT)
+      run: docker-compose -f ./.github/infrastructure/docker-compose-ibmmq.yml -p ibmmq up -d
+      if: contains(matrix.component, 'mqtt-ibmmq')
 
     - name: Start hazelcast
       run: docker-compose -f ./.github/infrastructure/docker-compose-hazelcast.yml -p hazelcast up -d

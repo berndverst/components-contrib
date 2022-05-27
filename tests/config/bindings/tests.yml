@@ -53,3 +53,6 @@ components:
   - component: mqtt
     profile: vernemq
     operations: ["create", "operations", "read"]
+  - component: mqtt
+    profile: ibmmq
+    operations: ["create", "operations", "read"]
