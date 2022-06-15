@@ -1,10 +1,9 @@
 version: '2'
 services:
   ibmmq:
-    image: ibmcom/mq:9.2.0.0-r3
+    image: AMULYAVAROTE/IBBMQ:AMULYAVERSION
     hostname: ibmmq
     environment:
     - LICENSE=accept
-    - MQ_QMGR_NAME=dapr
     ports:
-    - "1414:1414"
+    - "9443:9443"
