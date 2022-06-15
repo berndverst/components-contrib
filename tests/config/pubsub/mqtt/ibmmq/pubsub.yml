@@ -7,7 +7,7 @@ spec:
   version: v1
   metadata:
   - name: url
-    value: "tcp://localhost:1414"
+    value: "tcp://localhost:9443"
   - name: consumerID
     value: "testConsumer"
   - name: retain
