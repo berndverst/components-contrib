@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.6.18.56646",
+      "templateHash": "17869346457385519159"
+    }
+  },
+  "parameters": {
+    "sqlServerName": {
+      "type": "string"
+    },
+    "rgLocation": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "ipRanges": {
+      "type": "array"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Sql/servers",
+      "apiVersion": "2021-02-01-preview",
+      "name": "[parameters('sqlServerName')]",
+      "location": "[parameters('rgLocation')]"
+    },
+    {
+      "copy": {
+        "name": "sqlServerFirewallRule",
+        "count": "[length(parameters('ipRanges'))]"
+      },
+      "type": "Microsoft.Sql/servers/firewallRules",
+      "apiVersion": "2021-02-01-preview",
+      "name": "[format('{0}/{1}', parameters('sqlServerName'), format('sqlGitHubRule{0}', copyIndex()))]",
+      "properties": {
+        "endIpAddress": "[format('{0}', parameters('ipRanges')[copyIndex()][1])]",
+        "startIpAddress": "[format('{0}', parameters('ipRanges')[copyIndex()][0])]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))]"
+      ]
+    }
+  ]
+}
