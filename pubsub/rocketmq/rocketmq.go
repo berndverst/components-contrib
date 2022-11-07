@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	mqp "github.com/apache/rocketmq-client-go/v2/producer"
 	"github.com/cenkalti/backoff/v4"
 
+	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
@@ -366,4 +368,11 @@ func (r *rocketMQ) Close() error {
 	}
 
 	return nil
+}
+
+func (r *rocketMQ) GetComponentMetadata() map[string]string {
+	metadataStruct := rocketMQMetaData{}
+	metadataInfo := map[string]string{}
+	metadata.GetMetadataInfoFromStructType(reflect.TypeOf(metadataStruct), &metadataInfo)
+	return metadataInfo
 }

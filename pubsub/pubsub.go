@@ -27,6 +27,7 @@ type PubSub interface {
 	Publish(req *PublishRequest) error
 	Subscribe(ctx context.Context, req SubscribeRequest, handler Handler) error
 	Close() error
+	GetComponentMetadata() map[string]string
 }
 
 // BulkPublisher is the interface that wraps the BulkPublish method.

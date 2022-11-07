@@ -19,16 +19,16 @@ import (
 
 type metadata struct {
 	// The consumer identifier
-	consumerID string
+	ConsumerID string
 	// The interval between checking for pending messages to redelivery (0 disables redelivery)
-	redeliverInterval time.Duration
+	RedeliverInterval time.Duration
 	// The amount time a message must be pending before attempting to redeliver it (0 disables redelivery)
-	processingTimeout time.Duration
+	ProcessingTimeout time.Duration
 	// The size of the message queue for processing
-	queueDepth uint
+	QueueDepth uint
 	// The number of concurrent workers that are processing messages
-	concurrency uint
+	Concurrency uint
 
 	// the max len of stream
-	maxLenApprox int64
+	MaxLenApprox int64
 }

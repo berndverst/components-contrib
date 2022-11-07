@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	stan "github.com/nats-io/stan.go"
 	"github.com/nats-io/stan.go/pb"
 
+	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
@@ -68,7 +70,7 @@ const (
 )
 
 type natsStreamingPubSub struct {
-	metadata         metadata
+	metadata         natsMetadata
 	natStreamingConn stan.Conn
 
 	logger logger.Logger
@@ -81,53 +83,31 @@ func NewNATSStreamingPubSub(logger logger.Logger) pubsub.PubSub {
 	return &natsStreamingPubSub{logger: logger}
 }
 
-func parseNATSStreamingMetadata(meta pubsub.Metadata) (metadata, error) {
-	m := metadata{}
-	if val, ok := meta.Properties[natsURL]; ok && val != "" {
-		m.natsURL = val
-	} else {
+func parseNATSStreamingMetadata(meta pubsub.Metadata) (natsMetadata, error) {
+	m := natsMetadata{}
+	metadata.DecodeMetadata(meta.Properties, &m)
+
+	if m.NatsURL == "" {
 		return m, errors.New("nats-streaming error: missing nats URL")
 	}
-	if val, ok := meta.Properties[natsStreamingClusterID]; ok && val != "" {
-		m.natsStreamingClusterID = val
-	} else {
+	if m.NatsStreamingClusterID == "" {
 		return m, errors.New("nats-streaming error: missing nats streaming cluster ID")
 	}
 
-	if val, ok := meta.Properties[subscriptionType]; ok {
-		if val == subscriptionTypeTopic || val == subscriptionTypeQueueGroup {
-			m.subscriptionType = val
-		} else {
-			return m, errors.New("nats-streaming error: valid value for subscriptionType is topic or queue")
-		}
+	if m.SubscriptionType != subscriptionTypeTopic && m.SubscriptionType != subscriptionTypeQueueGroup {
+		return m, errors.New("nats-streaming error: invalid value for subscriptionType is topic or queue")
 	}
 
-	if val, ok := meta.Properties[consumerID]; ok && val != "" {
-		m.natsQueueGroupName = val
+	if m.NatsQueueGroupName == "" && m.ConsumerID != "" {
+		m.NatsQueueGroupName = m.ConsumerID
 	} else {
-		return m, errors.New("nats-streaming error: missing queue group name")
+		if m.NatsQueueGroupName == "" {
+			return m, errors.New("nats-streaming error: missing queue group name")
+		}
 	}
 
-	if val, ok := meta.Properties[durableSubscriptionName]; ok && val != "" {
-		m.durableSubscriptionName = val
-	}
-
-	if val, ok := meta.Properties[ackWaitTime]; ok && val != "" {
-		dur, err := time.ParseDuration(meta.Properties[ackWaitTime])
-		if err != nil {
-			return m, fmt.Errorf("nats-streaming error %s ", err)
-		}
-		m.ackWaitTime = dur
-	}
-	if val, ok := meta.Properties[maxInFlight]; ok && val != "" {
-		max, err := strconv.ParseUint(meta.Properties[maxInFlight], 10, 64)
-		if err != nil {
-			return m, fmt.Errorf("nats-streaming error in parsemetadata for maxInFlight: %s ", err)
-		}
-		if max < 1 {
-			return m, errors.New("nats-streaming error: maxInFlight should be equal to or more than 1")
-		}
-		m.maxInFlight = max
+	if m.MaxInFlight != 0 && m.MaxInFlight < 1 {
+		return m, errors.New("nats-streaming error: maxInFlight should be equal to or more than 1")
 	}
 
 	//nolint:nestif
@@ -141,25 +121,25 @@ func parseNATSStreamingMetadata(meta pubsub.Metadata) (metadata, error) {
 		if seq < 1 {
 			return m, errors.New("nats-streaming error: startAtSequence should be equal to or more than 1")
 		}
-		m.startAtSequence = seq
+		m.StartAtSequence = seq
 	} else if val, ok := meta.Properties[startWithLastReceived]; ok {
 		// only valid value is true
 		if val == startWithLastReceivedTrue {
-			m.startWithLastReceived = val
+			m.StartWithLastReceived = val
 		} else {
 			return m, errors.New("nats-streaming error: valid value for startWithLastReceived is true")
 		}
 	} else if val, ok := meta.Properties[deliverAll]; ok {
 		// only valid value is true
 		if val == deliverAllTrue {
-			m.deliverAll = val
+			m.DeliverAll = val
 		} else {
 			return m, errors.New("nats-streaming error: valid value for deliverAll is true")
 		}
 	} else if val, ok := meta.Properties[deliverNew]; ok {
 		// only valid value is true
 		if val == deliverNewTrue {
-			m.deliverNew = val
+			m.DeliverNew = val
 		} else {
 			return m, errors.New("nats-streaming error: valid value for deliverNew is true")
 		}
@@ -168,11 +148,11 @@ func parseNATSStreamingMetadata(meta pubsub.Metadata) (metadata, error) {
 		if err != nil {
 			return m, fmt.Errorf("nats-streaming error %s ", err)
 		}
-		m.startAtTimeDelta = dur
+		m.StartAtTimeDelta = dur
 	} else if val, ok := meta.Properties[startAtTime]; ok && val != "" {
-		m.startAtTime = val
+		m.StartAtTime = val
 		if val, ok := meta.Properties[startAtTimeFormat]; ok && val != "" {
-			m.startAtTimeFormat = val
+			m.StartAtTimeFormat = val
 		} else {
 			return m, errors.New("nats-streaming error: missing value for startAtTimeFormat")
 		}
@@ -183,7 +163,7 @@ func parseNATSStreamingMetadata(meta pubsub.Metadata) (metadata, error) {
 		return m, fmt.Errorf("nats-streaming error: can't parse %s: %s", pubsub.ConcurrencyKey, err)
 	}
 
-	m.concurrencyMode = c
+	m.ConcurrencyMode = c
 	return m, nil
 }
 
@@ -195,15 +175,15 @@ func (n *natsStreamingPubSub) Init(metadata pubsub.Metadata) error {
 	n.metadata = m
 	clientID := genRandomString(20)
 	opts := []nats.Option{nats.Name(clientID)}
-	natsConn, err := nats.Connect(m.natsURL, opts...)
+	natsConn, err := nats.Connect(m.NatsURL, opts...)
 	if err != nil {
-		return fmt.Errorf("nats-streaming: error connecting to nats server at %s: %s", m.natsURL, err)
+		return fmt.Errorf("nats-streaming: error connecting to nats server at %s: %s", m.NatsURL, err)
 	}
-	natStreamingConn, err := stan.Connect(m.natsStreamingClusterID, clientID, stan.NatsConn(natsConn))
+	natStreamingConn, err := stan.Connect(m.NatsStreamingClusterID, clientID, stan.NatsConn(natsConn))
 	if err != nil {
-		return fmt.Errorf("nats-streaming: error connecting to nats streaming server %s: %s", m.natsStreamingClusterID, err)
+		return fmt.Errorf("nats-streaming: error connecting to nats streaming server %s: %s", m.NatsStreamingClusterID, err)
 	}
-	n.logger.Debugf("connected to natsstreaming at %s", m.natsURL)
+	n.logger.Debugf("connected to natsstreaming at %s", m.NatsURL)
 
 	// Default retry configuration is used if no
 	// backOff properties are set.
@@ -249,7 +229,7 @@ func (n *natsStreamingPubSub) Subscribe(ctx context.Context, req pubsub.Subscrib
 			}
 		}
 
-		switch n.metadata.concurrencyMode {
+		switch n.metadata.ConcurrencyMode {
 		case pubsub.Single:
 			f()
 		case pubsub.Parallel:
@@ -258,10 +238,10 @@ func (n *natsStreamingPubSub) Subscribe(ctx context.Context, req pubsub.Subscrib
 	}
 
 	var subscription stan.Subscription
-	if n.metadata.subscriptionType == subscriptionTypeTopic {
+	if n.metadata.SubscriptionType == subscriptionTypeTopic {
 		subscription, err = n.natStreamingConn.Subscribe(req.Topic, natsMsgHandler, natStreamingsubscriptionOptions...)
-	} else if n.metadata.subscriptionType == subscriptionTypeQueueGroup {
-		subscription, err = n.natStreamingConn.QueueSubscribe(req.Topic, n.metadata.natsQueueGroupName, natsMsgHandler, natStreamingsubscriptionOptions...)
+	} else if n.metadata.SubscriptionType == subscriptionTypeQueueGroup {
+		subscription, err = n.natStreamingConn.QueueSubscribe(req.Topic, n.metadata.NatsQueueGroupName, natsMsgHandler, natStreamingsubscriptionOptions...)
 	}
 
 	if err != nil {
@@ -276,10 +256,10 @@ func (n *natsStreamingPubSub) Subscribe(ctx context.Context, req pubsub.Subscrib
 		}
 	}()
 
-	if n.metadata.subscriptionType == subscriptionTypeTopic {
+	if n.metadata.SubscriptionType == subscriptionTypeTopic {
 		n.logger.Debugf("nats-streaming: subscribed to subject %s", req.Topic)
-	} else if n.metadata.subscriptionType == subscriptionTypeQueueGroup {
-		n.logger.Debugf("nats-streaming: subscribed to subject %s with queue group %s", req.Topic, n.metadata.natsQueueGroupName)
+	} else if n.metadata.SubscriptionType == subscriptionTypeQueueGroup {
+		n.logger.Debugf("nats-streaming: subscribed to subject %s with queue group %s", req.Topic, n.metadata.NatsQueueGroupName)
 	}
 
 	return nil
@@ -288,24 +268,24 @@ func (n *natsStreamingPubSub) Subscribe(ctx context.Context, req pubsub.Subscrib
 func (n *natsStreamingPubSub) subscriptionOptions() ([]stan.SubscriptionOption, error) {
 	var options []stan.SubscriptionOption
 
-	if n.metadata.durableSubscriptionName != "" {
-		options = append(options, stan.DurableName(n.metadata.durableSubscriptionName))
+	if n.metadata.DurableSubscriptionName != "" {
+		options = append(options, stan.DurableName(n.metadata.DurableSubscriptionName))
 	}
 
 	switch {
-	case n.metadata.deliverNew == deliverNewTrue:
+	case n.metadata.DeliverNew == deliverNewTrue:
 		options = append(options, stan.StartAt(pb.StartPosition_NewOnly)) //nolint:nosnakecase
-	case n.metadata.startAtSequence >= 1: // messages index start from 1, this is a valid check
-		options = append(options, stan.StartAtSequence(n.metadata.startAtSequence))
-	case n.metadata.startWithLastReceived == startWithLastReceivedTrue:
+	case n.metadata.StartAtSequence >= 1: // messages index start from 1, this is a valid check
+		options = append(options, stan.StartAtSequence(n.metadata.StartAtSequence))
+	case n.metadata.StartWithLastReceived == startWithLastReceivedTrue:
 		options = append(options, stan.StartWithLastReceived())
-	case n.metadata.deliverAll == deliverAllTrue:
+	case n.metadata.DeliverAll == deliverAllTrue:
 		options = append(options, stan.DeliverAllAvailable())
-	case n.metadata.startAtTimeDelta > (1 * time.Nanosecond): // as long as its a valid time.Duration
-		options = append(options, stan.StartAtTimeDelta(n.metadata.startAtTimeDelta))
-	case n.metadata.startAtTime != "":
-		if n.metadata.startAtTimeFormat != "" {
-			startTime, err := time.Parse(n.metadata.startAtTimeFormat, n.metadata.startAtTime)
+	case n.metadata.StartAtTimeDelta > (1 * time.Nanosecond): // as long as its a valid time.Duration
+		options = append(options, stan.StartAtTimeDelta(n.metadata.StartAtTimeDelta))
+	case n.metadata.StartAtTime != "":
+		if n.metadata.StartAtTimeFormat != "" {
+			startTime, err := time.Parse(n.metadata.StartAtTimeFormat, n.metadata.StartAtTime)
 			if err != nil {
 				return nil, err
 			}
@@ -317,11 +297,11 @@ func (n *natsStreamingPubSub) subscriptionOptions() ([]stan.SubscriptionOption, 
 	options = append(options, stan.SetManualAckMode())
 
 	// check if set the ack options.
-	if n.metadata.ackWaitTime > (1 * time.Nanosecond) {
-		options = append(options, stan.AckWait(n.metadata.ackWaitTime))
+	if n.metadata.AckWaitTime > (1 * time.Nanosecond) {
+		options = append(options, stan.AckWait(n.metadata.AckWaitTime))
 	}
-	if n.metadata.maxInFlight >= 1 {
-		options = append(options, stan.MaxInflight(int(n.metadata.maxInFlight)))
+	if n.metadata.MaxInFlight >= 1 {
+		options = append(options, stan.MaxInflight(int(n.metadata.MaxInFlight)))
 	}
 
 	return options, nil
@@ -347,4 +327,11 @@ func (n *natsStreamingPubSub) Close() error {
 
 func (n *natsStreamingPubSub) Features() []pubsub.Feature {
 	return nil
+}
+
+func (n *natsStreamingPubSub) GetComponentMetadata() map[string]string {
+	metadataStruct := natsMetadata{}
+	metadataInfo := map[string]string{}
+	metadata.GetMetadataInfoFromStructType(reflect.TypeOf(metadataStruct), &metadataInfo)
+	return metadataInfo
 }

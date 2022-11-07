@@ -49,8 +49,8 @@ func TestParseRedisMetadata(t *testing.T) {
 
 		// assert
 		assert.NoError(t, err)
-		assert.Equal(t, fakeProperties[consumerID], m.consumerID)
-		assert.Equal(t, int64(1000), m.maxLenApprox)
+		assert.Equal(t, fakeProperties[consumerID], m.ConsumerID)
+		assert.Equal(t, int64(1000), m.MaxLenApprox)
 	})
 
 	t.Run("consumerID is not given", func(t *testing.T) {
@@ -65,7 +65,7 @@ func TestParseRedisMetadata(t *testing.T) {
 		m, err := parseRedisMetadata(fakeMetaData)
 		// assert
 		assert.Error(t, errors.New("redis streams error: missing consumerID"), err)
-		assert.Empty(t, m.consumerID)
+		assert.Empty(t, m.ConsumerID)
 	})
 }
 

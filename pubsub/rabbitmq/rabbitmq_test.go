@@ -72,7 +72,7 @@ func TestConcurrencyMode(t *testing.T) {
 		}}
 		err := pubsubRabbitMQ.Init(metadata)
 		assert.Nil(t, err)
-		assert.Equal(t, pubsub.Parallel, pubsubRabbitMQ.(*rabbitMQ).metadata.concurrency)
+		assert.Equal(t, pubsub.Parallel, pubsubRabbitMQ.(*rabbitMQ).metadata.Concurrency)
 	})
 
 	t.Run("single", func(t *testing.T) {
@@ -87,7 +87,7 @@ func TestConcurrencyMode(t *testing.T) {
 		}}
 		err := pubsubRabbitMQ.Init(metadata)
 		assert.Nil(t, err)
-		assert.Equal(t, pubsub.Single, pubsubRabbitMQ.(*rabbitMQ).metadata.concurrency)
+		assert.Equal(t, pubsub.Single, pubsubRabbitMQ.(*rabbitMQ).metadata.Concurrency)
 	})
 
 	t.Run("default", func(t *testing.T) {
@@ -101,7 +101,7 @@ func TestConcurrencyMode(t *testing.T) {
 		}}
 		err := pubsubRabbitMQ.Init(metadata)
 		assert.Nil(t, err)
-		assert.Equal(t, pubsub.Parallel, pubsubRabbitMQ.(*rabbitMQ).metadata.concurrency)
+		assert.Equal(t, pubsub.Parallel, pubsubRabbitMQ.(*rabbitMQ).metadata.Concurrency)
 	})
 }
 
