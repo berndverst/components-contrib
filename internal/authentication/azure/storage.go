@@ -60,15 +60,17 @@ func GetAzureStorageBlobCredentials(log logger.Logger, accountName string, metad
 	}
 	var tokenRefresher azblob.TokenRefresher = func(credential azblob.TokenCredential) time.Duration {
 		log.Debug("Refreshing Azure Storage auth token")
+		log.Debug("Old token. Expired? %s Expiration time: %v", spt.Token().IsExpired(), spt.Token().Expires())
 		err := spt.Refresh()
 		if err != nil {
 			panic(err)
 		}
 		token := spt.Token()
+		log.Debug("New token. Expired? %s Expiration time: %v", token.IsExpired(), token.Expires())
 		credential.SetToken(token.AccessToken)
 
 		// Make the token expire 2 minutes earlier to get some extra buffer
-		exp := token.Expires().Sub(time.Now().Add(2 * time.Minute))
+		exp := 10 * time.Second
 		log.Debug("Received new token, valid for", exp)
 
 		return exp
@@ -104,15 +106,18 @@ func GetAzureStorageQueueCredentials(log logger.Logger, accountName string, meta
 	}
 	var tokenRefresher azqueue.TokenRefresher = func(credential azqueue.TokenCredential) time.Duration {
 		log.Debug("Refreshing Azure Storage auth token")
+		log.Debug("Old token. Expired? %s Expiration time: %v", spt.Token().IsExpired(), spt.Token().Expires())
 		err := spt.Refresh()
 		if err != nil {
 			panic(err)
 		}
 		token := spt.Token()
+		log.Debug("New token. Expired? %s Expiration time: %v", token.IsExpired(), token.Expires())
 		credential.SetToken(token.AccessToken)
 
 		// Make the token expire 2 minutes earlier to get some extra buffer
-		exp := token.Expires().Sub(time.Now().Add(2 * time.Minute))
+		exp := 10 * time.Second
+		token.Expires()
 		log.Debug("Received new token, valid for", exp)
 
 		return exp
