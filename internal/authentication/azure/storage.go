@@ -98,24 +98,29 @@ func GetAzureStorageQueueCredentials(log logger.Logger, accountName string, meta
 	}
 
 	// Fallback to using Azure AD
+	log.Warn("Using Azure AD auth for Azure Storage Queue")
 	spt, err := settings.GetServicePrincipalToken()
+	log.Warn(fmt.Sprintf("Initial token expires on: %v", spt.Token().Expires()))
 	if err != nil {
 		return nil, nil, err
 	}
 	var tokenRefresher azqueue.TokenRefresher = func(credential azqueue.TokenCredential) time.Duration {
-		log.Debug("Refreshing Azure Storage auth token")
+		log.Warn("Refreshing Azure Storage auth token")
+		log.Warnf("Token Expiry before refresh: %v", spt.Token().Expires())
 		err := spt.Refresh()
 		if err != nil {
 			panic(err)
 		}
 		token := spt.Token()
+		log.Warnf("Refreshed Token Expires: %v", token.Expires())
 		credential.SetToken(token.AccessToken)
 
 		// Make the token expire 2 minutes earlier to get some extra buffer
 		exp := token.Expires().Sub(time.Now().Add(2 * time.Minute))
-		log.Debug("Received new token, valid for", exp)
+		log.Warnf("New token valid for duration: ", exp)
 
-		return exp
+		log.Warn("Override token refresh duration to 30 seconds for testing. Only impacts when refresh function is called.")
+		return 30 * time.Second
 	}
 	credential := azqueue.NewTokenCredential("", tokenRefresher)
 
