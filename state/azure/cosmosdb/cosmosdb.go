@@ -357,9 +357,7 @@ func (c *StateStore) Multi(ctx context.Context, request *state.TransactionalStat
 		return nil
 	}
 
-	var partitionKey string
-	partitionKey = populatePartitionMetadata(partitionKey, request.Metadata)
-
+	partitionKey := request.Metadata[metadataPartitionKey]
 	batch := c.client.NewTransactionalBatch(azcosmos.NewPartitionKeyString(partitionKey))
 
 	numOperations := 0
@@ -378,8 +376,7 @@ func (c *StateStore) Multi(ctx context.Context, request *state.TransactionalStat
 			if req.ETag != nil && *req.ETag != "" {
 				etag := azcore.ETag(*req.ETag)
 				options.IfMatchETag = &etag
-			}
-			if req.Options.Concurrency == state.FirstWrite && (req.ETag == nil || *req.ETag == "") {
+			} else if req.Options.Concurrency == state.FirstWrite {
 				var u uuid.UUID
 				u, err = uuid.NewRandom()
 				if err != nil {
@@ -393,7 +390,7 @@ func (c *StateStore) Multi(ctx context.Context, request *state.TransactionalStat
 			if err != nil {
 				return err
 			}
-			batch.UpsertItem(marsh, nil)
+			batch.UpsertItem(marsh, options)
 			numOperations++
 		} else if o.Operation == state.Delete {
 			req := o.Request.(state.DeleteRequest)
@@ -401,8 +398,7 @@ func (c *StateStore) Multi(ctx context.Context, request *state.TransactionalStat
 			if req.ETag != nil && *req.ETag != "" {
 				etag := azcore.ETag(*req.ETag)
 				options.IfMatchETag = &etag
-			}
-			if req.Options.Concurrency == state.FirstWrite && (req.ETag == nil || *req.ETag == "") {
+			} else if req.Options.Concurrency == state.FirstWrite {
 				var u uuid.UUID
 				u, err = uuid.NewRandom()
 				if err != nil {
@@ -438,8 +434,10 @@ func (c *StateStore) Multi(ctx context.Context, request *state.TransactionalStat
 
 	// Transaction succeeded
 	// We can inspect the individual operation results
-	for index, operation := range batchResponse.OperationResults {
-		c.logger.Debugf("Operation %v completed with status code %d", index, operation.StatusCode)
+	if c.logger.IsOutputLevelEnabled(logger.DebugLevel) {
+		for index, operation := range batchResponse.OperationResults {
+			c.logger.Debugf("Operation %v completed with status code %d", index, operation.StatusCode)
+		}
 	}
 
 	return nil
