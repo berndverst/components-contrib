@@ -25,7 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hamba/avro/v2"
+	"github.com/linkedin/goavro/v2"
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/apache/pulsar-client-go/pulsar/crypto"
@@ -292,12 +292,12 @@ func parsePublishMetadata(req *pubsub.PublishRequest, schema schemaMetadata) (
 		msg.Value = obj
 	case avroProtocol:
 		var obj interface{}
-		avroSchema, parseErr := avro.Parse(schema.value)
+		codec, parseErr := goavro.NewCodec(schema.value)
 		if parseErr != nil {
 			return nil, parseErr
 		}
 
-		err = avro.Unmarshal(avroSchema, req.Data, &obj)
+		obj, _, err = codec.NativeFromTextual(req.Data)
 
 		if err != nil {
 			return nil, err
