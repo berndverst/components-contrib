@@ -112,7 +112,7 @@ func (r *redisStreams) Publish(ctx context.Context, req *pubsub.PublishRequest) 
 func (r *redisStreams) CreateConsumerGroup(ctx context.Context, stream string) error {
 	err := r.client.XGroupCreateMkStream(ctx, stream, r.clientSettings.ConsumerID, "0")
 	// Ignore BUSYGROUP errors
-	if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
+	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
 		r.logger.Errorf("redis streams: %s", err)
 		return err
 	}
